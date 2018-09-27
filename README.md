@@ -4,6 +4,8 @@ A tiny "Whats my IP address" - service written in [Lua](https://lua.org/), using
 
 ## TODO
 
+* caching headers
+* css gzip
 * Documentation (e.g. usage, installation)
 * systemd file
 * maybe reverse dns
