@@ -12,4 +12,7 @@ config.html_root = './html/'
 -- the domain, which is shown on the html page (default: localhost)
 config.domain = 'wmi.kokolor.es'
 
+-- enable logging (default: false)
+config.logging = true
+
 return config

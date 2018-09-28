@@ -22,7 +22,8 @@ local function loadconfig(cfg)
       host = 'localhost',
       port = 9090,
       html_root = './html/',
-      domain = 'localhost'
+      domain = 'localhost',
+      logging = false
     }
   end
   
@@ -184,6 +185,18 @@ local function wmia_handler(_, stream)
   local req_agent = req_headers:get('user-agent'):lower():match('^(%w+)/.*$')
   local req_path = req_headers:get(':path'):lower() -- get path from, beginning from the last /
   local ip
+
+  if CONFIG.logging then
+    -- date method path httpversion useragent
+    local log_format = '[%s] "%s %s HTTP/%g" "%s"\n'
+    io.stdout:write(log_format:format(
+        os.date("%d/%b/%Y:%H:%M:%S %z"),
+        req_method or '-',
+        req_path or '-',
+        stream.connection.version,
+        req_headers:get('user-agent') or '-'
+      ))
+  end
 
   -- only GET and HEAD is allowed, response to others with status 403
   if req_method == 'GET' or req_method == 'HEAD' then
