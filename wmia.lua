@@ -1,4 +1,4 @@
-#!/usr/bin/env lua5.3
+#!/usr/bin/env lua5.4
 --- Whats my IP address
 -- Yet another Whats my IP address - Service
 
@@ -8,39 +8,85 @@ local cerrno = require('cqueues.errno')
 local lfs = require('lfs')
 local mimetypes = require('mimetypes')
 
+local logger
 
 ----------------------------------------------
 ---   Load configuration or use defaults   ---
 ----------------------------------------------
-local function loadconfig(cfg)
-  local conf, err = loadfile(cfg)
-  
-  if not conf and err then
-    io.stdout:write(string.format('ERROR: Can\'t load config %s. Use defaults!\n', cfg))
-
-    return { 
-      host = 'localhost',
-      port = 9090,
-      html_root = './html/',
-      domain = 'localhost',
-      logging = false
-    }
-  end
-  
-  return conf()
-end
-
+local ENV_VARS = { 'WMIA_HOST', 'WMIA_PORT', 'WMIA_HTML_ROOT', 'WMIA_DOMAIN' }
+local DEFAULTS = {
+  host = '0.0.0.0',
+  port = 9090,
+  html_root = './html/',
+  domain = 'localhost'
+}
 local CONFIG
-if arg[1] and arg[1] == '-c' and arg[2] then
-  CONFIG = loadconfig(arg[2])
-else
-  CONFIG = loadconfig('config.cfg.lua')
+
+-- check if path exists
+local function exists(path)
+  local ok, _, errno = lfs.attributes(path, 'ino')
+
+  return (ok or errno == 13) and true or false
 end
+
+-- getting config values from environment variables
+-- for example when running in docker
+local function apply_env_config(conf)
+  for _, var in ipairs(ENV_VARS) do
+    local val = os.getenv(var)
+
+    if val then
+      local opt = var:sub(6):lower()
+      logger('INFO', 'Setting value of option %q to %q given by %s', opt, val, var)
+      conf[opt] = val
+    end
+  end
+end
+
+-- apply default settings which are not set
+local function apply_defaults(conf)
+  for k, v in pairs(DEFAULTS) do
+    if conf[k] == nil then
+      logger('INFO', 'Settings %q for option %q, because it was nil', v, k)
+      conf[k] = v
+    end
+  end
+end
+
+-- loading the configuration, from file, environment and/or default values
+local function load_config(cfg)
+  local conf = {}
+
+  if exists(cfg) then
+    logger('INFO', 'Loading config from file %s', cfg)
+    local fh = assert(io.open(cfg))
+    local content = fh:read('*a')
+    fh:close()
+
+    local fn = assert(load(content, cfg))
+    conf = fn()
+  end
+
+  apply_env_config(conf)
+  apply_defaults(conf)
+
+  return conf
+end
+
 ----------------------------------------------
 
 ----------------------------------------------
 ---            Helper functions            ---
 ----------------------------------------------
+
+-- simple logger
+function logger(level, msg, ...)
+  level = level:upper()
+
+  io.write(('[%s] %s\n'):format(level, msg:format(...)))
+  io.flush()
+end
+
 -- takes linux system errors and return fitting
 -- http status code
 local function get_err_status_code(errnr)
@@ -57,24 +103,23 @@ end
 -- preffer the X-Real-IP over X-Forwared-For if
 -- proxied
 local function get_req_ip(con_ip, req_headers)
-  if con_ip == '127.0.0.1' and ( req_headers:has('x-real-ip') or req_headers:has('x-forwarded-for') ) then
-      -- preffer x-real-ip over x-forwarded-for
-      return req_headers:get('x-real-ip') or req_headers:get('x-forwarded-for')
-  end
+  local ip = con_ip == '127.0.0.1'
+    and (req_headers:has('x-real-ip') or req_headers:has('x-forwarded-for'))
+    or con_ip
 
-  return con_ip
+  return ip
 end
 
 -- opens and read the index.html, replaces the
 -- placeholders and returns it
 local function gen_index_site(ip)
-  local file, err, errnr = io.open(CONFIG.html_root .. 'index.html', 'r')
-  
-  if not file and err then return nil, errnr end
-    
-  local index = file:read('*a')
-  file:close()
-  
+  local fh, _, errno = io.open(CONFIG.html_root .. 'index.html', 'r')
+
+  if not fh then return nil, errno end
+
+  local index = fh:read('*a')
+  fh:close()
+
   return index:gsub('{{ IP }}', ip):gsub('{{ DOMAIN }}', CONFIG.domain)
 end
 ----------------------------------------------
@@ -84,14 +129,14 @@ end
 ----------------------------------------------
 -- returns error pages
 local function err_responder(stream, method, status, msg)
-  local res_headers = http_headers.new()    
+  local res_headers = http_headers.new()
   local http_state = {
     ['403'] = 'Forbidden',
     ['404'] = 'Not Found',
     ['500'] = 'Internatl Server Error'
   }
   msg = msg or http_state[status]
-  
+
   res_headers:append(':status', status)
   res_headers:append('content_type', 'text/plain')
   stream:write_headers(res_headers, method == 'HEAD')
@@ -103,12 +148,12 @@ end
 
 -- returns IP address in plain text
 local function plaintxt_responder(stream, method, ip)
-  local res_headers = http_headers.new()    
-  
+  local res_headers = http_headers.new()
+
   res_headers:append(':status', '200')
   res_headers:append('content-type', 'text/plain')
   stream:write_headers(res_headers, method == 'HEAD')
-  
+
   if method ~= 'HEAD' then
     stream:write_body_from_string(ip)
   end
@@ -116,9 +161,9 @@ end
 
 -- returns fancy html page with IP address
 local function html_responder(stream, method, ip)
-  local res_headers = http_headers.new()    
-  local resp_content, errnr = gen_index_site(ip)
-  
+  local res_headers = http_headers.new()
+  local resp_content, errno = gen_index_site(ip)
+
   if resp_content then
     res_headers:append(':status', '200')
     res_headers:append('content-type', 'text/html')
@@ -127,18 +172,18 @@ local function html_responder(stream, method, ip)
       stream:write_body_from_string(resp_content)
     end
   else
-    err_responder(stream, method, get_err_status_code(errnr))
+    err_responder(stream, method, get_err_status_code(errno))
   end
 end
 
 -- returns IP address in JSON
 local function json_responder(stream, method, ip)
-  local res_headers = http_headers.new()    
-  
+  local res_headers = http_headers.new()
+
   res_headers:append(':status', '200')
   res_headers:append('content-type', 'application/json')
   stream:write_headers(res_headers, method == 'HEAD')
-  
+
   if method ~= 'HEAD' then
     stream:write_body_from_string(('{ "ip": %q }'):format(ip))
   end
@@ -154,20 +199,22 @@ local function serve_static(stream, req_path, method)
   local res_headers = http_headers.new()
   local path = CONFIG.html_root .. req_path
   local f_type = lfs.attributes(path, 'mode')
-  
-  if f_type == 'file' then
-    local fd, err, errnr = io.open(path, 'rb')
 
-    if fd then
+  if f_type == 'file' then
+    local fh, err, errno = io.open(path, 'rb')
+
+    if fh then
       res_headers:append(':status', '200')
       res_headers:append('content-type', mimetypes.guess(path))
       assert(stream:write_headers(res_headers, method == 'HEAD'))
 
       if method ~= 'HEAD' then
-        assert(stream:write_body_from_file(fd))
+        assert(stream:write_body_from_file(fh))
       end
+
+      fh:close()
     else
-      err_responder(stream, method, get_err_status_code(errnr), err)
+      err_responder(stream, method, get_err_status_code(errno), err)
     end
   else
     err_responder(stream, method, '500')
@@ -178,6 +225,7 @@ end
 ----------------------------------------------
 ---    Whats my IP address main handler    ---
 ----------------------------------------------
+
 local function wmia_handler(_, stream)
   local cli_agents = { curl = true, wget = true, httpie = true }
   local req_headers = assert(stream:get_headers())  -- get header object from stream
@@ -186,17 +234,13 @@ local function wmia_handler(_, stream)
   local req_path = req_headers:get(':path'):lower() -- get path from, beginning from the last /
   local ip
 
-  if CONFIG.logging then
-    -- date method path httpversion useragent
-    local log_format = '[%s] "%s %s HTTP/%g" "%s"\n'
-    io.stdout:write(log_format:format(
-        os.date("%d/%b/%Y:%H:%M:%S %z"),
-        req_method or '-',
-        req_path or '-',
-        stream.connection.version,
-        req_headers:get('user-agent') or '-'
-      ))
-  end
+  logger('INFO', '[%s] "%s %s HTTP/%g" "%s"',
+      os.date("%d/%b/%Y:%H:%M:%S %z"),
+      req_method or '-',
+      req_path or '-',
+      stream.connection.version,
+      req_headers:get('user-agent') or '-'
+    )
 
   -- only GET and HEAD is allowed, response to others with status 403
   if req_method == 'GET' or req_method == 'HEAD' then
@@ -224,11 +268,13 @@ end
 
 -- error handler, which writes error details to console
 local function error_handler(_, context, op, err)
-  local msg = op .. " on " .. tostring(context) .. " failed"
-		if err then
-			msg = msg .. ": " .. tostring(err)
-		end
-  assert(io.stderr:write(msg, "\n"))
+  local msg = ('%s on %s failed'):format(op, tostring(context))
+
+  if err then
+    msg = msg .. ": " .. tostring(err)
+  end
+
+  logger('ERROR', msg)
 end
 ----------------------------------------------
 
@@ -236,18 +282,24 @@ end
 ----------------------------------------------
 ---              Start server              ---
 ----------------------------------------------
+if arg[1] and arg[1] == '-c' and arg[2] then
+  CONFIG = load_config(arg[2])
+else
+  CONFIG = load_config('config.cfg')
+end
+
 local server = assert(http_server.listen({
-        host = CONFIG.host,
-        port = CONFIG.port,
-        onstream = wmia_handler,
-        onerror = error_handler
-      }))
+  host = CONFIG.host,
+  port = CONFIG.port,
+  onstream = wmia_handler,
+  onerror = error_handler
+}))
 
 assert(server:listen())
 
 do
   local _, host, port = server:localname()
-  io.stderr:write(string.format('Server is running on %s:%d\n', host, port))
+  logger('INFO', 'Server is running on %s:%d', host, port)
 end
 
 assert(server:loop())
