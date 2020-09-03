@@ -4,8 +4,7 @@ A tiny "Whats my IP address" - service written in [Lua](https://lua.org/), using
 
 ## Installation
 
-Currently it is recommand to run this service behind nginx. In the future it should be possible to run it standalone too, but for this a few features are missing.
-This installation assume you're using Debian or Ubuntu, but should work on other systems too, when you replace the package manager commands.
+Currently it is recommand to run this service behind nginx.
 
 ### Dependencies
 
@@ -14,14 +13,32 @@ This installation assume you're using Debian or Ubuntu, but should work on other
 * [lua-http](https://github.com/daurnimator/lua-http)
 * [mimetypes](https://bitbucket.org/leafstorm/lua-mimetypes/)
 * [luafilesystem](https://github.com/keplerproject/luafilesystem)
-* [nginx](https://www.nginx.com/)
 
-### Install dependencies
+### Docker installation
+
+There is an docker image, which is the easiest way to run this service. Just do
+
+```
+docker run -it -d --rm --init -p 127.0.0.1:9090:9090 imolein/wmia:latest
+```
+
+To configure the service you can run docker with the following environment variables:
+
+`WMIA_HOST`, `WMIA_PORT`, `WMIA_HTML_ROOT`, `WMIA_DOMAIN`
+
+for example:
+```
+docker run -it -d --rm --init -p 127.0.0.1:9090:9090 -e WMIA_HOST=0.0.0.0 -e WMIA_PORT=9090 -e WMIA_HTML_ROOT=./html -e WMIA_DOMAIN=example.com imolein/wmia:latest
+```
+
+Or you use docker-compose and the example `docker-compose.yaml` file from this repository.
+
+### Manual installation
 
 * [Install luarocks](https://github.com/luarocks/luarocks/wiki/Installation-instructions-for-Unix)
 * Install **Lua** and **nginx**
 ```
-apt install lua5.3 nginx
+apt install lua5.4 nginx
 ```
 * Create a new user
 ```
@@ -46,6 +63,7 @@ cd whats-my-ip-address/
 * Initialize **luarocks** for this project
 ```
 luarocks init
+luarocks init --reset    # see issue https://github.com/luarocks/luarocks/issues/924
 ```
 The benefit is, that **luarocks** will now install new modules in this folder, which keeps the rest of the system clean. But if you want to install the modules for the whole user or the whole system you can do this as well.
 
@@ -77,7 +95,5 @@ If all paths are correctly, the service should start and be reachable locally
 
 ## TODO
 
-* Create Dockerfile
-* Documentation (e.g. usage, installation)
 * maybe reverse dns
 * maybe geoip = http://geoip.nekudo.com
