@@ -1,0 +1,13 @@
+version: '3'
+
+services:
+  wmia:
+    image: imolein/wmia:0.2
+    ports:
+      - 9090:9090
+    restart: always
+    environment:
+      - WMIA_HOST=0.0.0.0
+      - WMIA_PORT=9090
+      - WMIA_HTML_ROOT=./html
+      - WMIA_DOMAIN=example.com
