@@ -16,7 +16,7 @@ Currently it is recommand to run this service behind nginx.
 
 ### Docker installation
 
-There is an docker image, which is the easiest way to run this service. Just do
+There is a [docker image](https://hub.docker.com/r/imolein/wmia), which is the easiest way to run this service. Just do
 
 ```
 docker run -it -d --rm --init -p 127.0.0.1:9090:9090 imolein/wmia:latest

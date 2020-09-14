@@ -60,11 +60,9 @@ local function load_config(cfg)
   if exists(cfg) then
     logger('INFO', 'Loading config from file %s', cfg)
     local fh = assert(io.open(cfg))
-    local content = fh:read('*a')
-    fh:close()
 
-    local fn = assert(load(content, cfg))
-    conf = fn()
+    assert(load(fh:read(2048), cfg, nil, conf))()
+    fh:close()
   end
 
   apply_env_config(conf)
@@ -103,11 +101,13 @@ end
 -- preffer the X-Real-IP over X-Forwared-For if
 -- proxied
 local function get_req_ip(con_ip, req_headers)
-  local ip = con_ip == '127.0.0.1'
-    and (req_headers:has('x-real-ip') or req_headers:has('x-forwarded-for'))
-    or con_ip
+  local ip
 
-  return ip
+  if con_ip == '127.0.0.1' then
+    ip = req_headers:get('x-real-ip') or req_headers:get('x-forwarded-for')
+  end
+
+  return ip or con_ip
 end
 
 -- opens and read the index.html, replaces the
