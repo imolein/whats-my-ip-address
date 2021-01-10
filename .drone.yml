@@ -26,9 +26,6 @@ steps:
         - tag
       status:
         - success
-    depends_on:
-      - lint
-
 
 trigger:
   refs:
