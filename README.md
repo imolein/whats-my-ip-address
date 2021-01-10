@@ -1,3 +1,5 @@
+[![Build Status](https://drone.kokolor.es/api/badges/imo/whats-my-ip-address/status.svg)](https://drone.kokolor.es/imo/whats-my-ip-address)
+
 # whats-my-ip
 
 A tiny "Whats my IP address" - service written in [Lua](https://lua.org/), using the [lua-http](https://github.com/daurnimator/lua-http) library.
