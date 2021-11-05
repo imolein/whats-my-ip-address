@@ -2,9 +2,9 @@ version: '3'
 
 services:
   wmia:
-    image: imolein/wmia:0.2
+    image: imolein/wmia:0.3
     ports:
-      - 9090:9090
+      - "127.0.0.1:9090:9090"
     restart: always
     environment:
       - WMIA_HOST=0.0.0.0
